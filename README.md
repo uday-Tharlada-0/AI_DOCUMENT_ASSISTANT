@@ -24,7 +24,7 @@ A Python-based document question-answering application built with FastAPI.
 
 Clone the repository:
 
-    git clone YOUR_GITHUB_REPOSITORY_URL
+    git clone https://github.com/uday-Tharlada-0/AI_DOCUMENT_ASSISTANT.git
 
 Navigate into the project:
 
