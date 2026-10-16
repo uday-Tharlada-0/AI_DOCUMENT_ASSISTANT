@@ -2,6 +2,9 @@ from fastapi import FastAPI,File,UploadFile,HTTPException
 from pydantic import BaseModel
 import pymupdf 
 import re
+import httpx 
+import os
+OLLAMA_URL = os.getenv("OLLAMA_URL","http://172.28.240.1:11434/api/generate")
 app =FastAPI(title ="AI Document Assistant") 
 class QuestionRequest(BaseModel):
     filename: str
@@ -44,48 +47,81 @@ def ask_question(request: QuestionRequest):
             detail="File not found. Please upload the file first."
         )
 
+    text = documents[request.filename]
+
+    # Retrieve relevant paragraphs using keyword matching
     stop_words = {
         "what", "is", "the", "a", "an", "of", "in",
         "to", "and", "how", "does", "do", "are", "can"
     }
 
-    def tokenize(text):
-        words = re.findall(r"\b[a-zA-Z0-9]+\b", text.lower())
+    def tokenize(value):
+        words = re.findall(r"\b[a-zA-Z0-9]+\b", value.lower())
         return set(words) - stop_words
 
     question_words = tokenize(request.question)
-
-    # Split the document into sentences instead of individual lines
-    text = documents[request.filename]
-    sentences = re.split(r"(?<=[.!?])\s+", text)
+    paragraphs = [
+        p.strip() for p in text.split("\n") if p.strip()
+    ]
 
     matches = []
 
-    for sentence in sentences:
-        sentence = sentence.strip()
-
-        if not sentence:
-            continue
-
-        sentence_words = tokenize(sentence)
-        score = len(question_words.intersection(sentence_words))
+    for paragraph in paragraphs:
+        paragraph_words = tokenize(paragraph)
+        score = len(question_words & paragraph_words)
 
         if score > 0:
-            # Prefer informative sentences over short headings
-            if len(sentence.split()) < 5:
-                score -= 0.5
-
-            matches.append((score, sentence))
+            matches.append((score, paragraph))
 
     if not matches:
         return {
             "question": request.question,
-            "answer": "No relevant information found in the document."
+            "answer": "I couldn't find relevant information in this document."
         }
 
     matches.sort(key=lambda item: item[0], reverse=True)
 
+    # Provide the best matching text as context
+    context = "\n".join(
+        paragraph for _, paragraph in matches[:5]
+    )
+
+    prompt = f"""
+You are an AI Document Assistant.
+
+Answer the question using only the document context below.
+If the context does not contain enough information, say so.
+Do not invent facts.
+
+Document context:
+{context}
+
+Question:
+{request.question}
+
+Answer:
+"""
+
+    try:
+        response = httpx.post(
+            OLLAMA_URL,
+            json={
+                "model": "gemma:2b",
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        answer = response.json()["response"].strip()
+
+    except httpx.HTTPError:
+        raise HTTPException(
+            status_code=502,
+            detail="Unable to communicate with the local AI model."
+        )
+
     return {
         "question": request.question,
-        "answer": matches[0][1]
+        "answer": answer,
     }
