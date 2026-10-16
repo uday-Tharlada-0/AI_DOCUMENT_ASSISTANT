@@ -40,7 +40,6 @@ An AI-powered document question-answering application built with Python and Fast
 ```text
 AI_DOCUMENT_ASSISTANT/
 ├── main.py
-├── test_ollama.py
 ├── pyproject.toml
 ├── uv.lock
 ├── README.md
