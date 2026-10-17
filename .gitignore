@@ -11,3 +11,4 @@ wheels/
 .env 
 #files 
 test_ollama.py
+temp1.py

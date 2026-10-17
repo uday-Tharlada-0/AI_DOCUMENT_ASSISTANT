@@ -4,6 +4,20 @@ import pymupdf
 import re
 import httpx 
 import os
+def chunk_text(text, chunk_size=500, overlap=100):
+    chunks = []
+    start = 0
+
+    while start < len(text):
+        end = start + chunk_size
+        chunk = text[start:end].strip()
+
+        if chunk:
+            chunks.append(chunk)
+
+        start += chunk_size - overlap
+
+    return chunks
 OLLAMA_URL = os.getenv("OLLAMA_URL","http://172.28.240.1:11434/api/generate")
 app =FastAPI(title ="AI Document Assistant") 
 class QuestionRequest(BaseModel):
@@ -33,7 +47,7 @@ async def upload_file(file: UploadFile =File(...)):
         status_code=400,
         detail="No extractable text found in this PDF."
     )
-    documents[file.filename] = text
+    documents[file.filename] =  chunk_text(text)
     return {
     "filename": file.filename,
     "pages": pages,
@@ -47,12 +61,11 @@ def ask_question(request: QuestionRequest):
             detail="File not found. Please upload the file first."
         )
 
-    text = documents[request.filename]
+    chunks = documents[request.filename]
 
-    # Retrieve relevant paragraphs using keyword matching
     stop_words = {
-        "what", "is", "the", "a", "an", "of", "in",
-        "to", "and", "how", "does", "do", "are", "can"
+    "what", "is", "the", "a", "an", "of", "in",
+    "to", "and", "how", "does", "do", "are", "can"
     }
 
     def tokenize(value):
@@ -60,30 +73,29 @@ def ask_question(request: QuestionRequest):
         return set(words) - stop_words
 
     question_words = tokenize(request.question)
-    paragraphs = [
-        p.strip() for p in text.split("\n") if p.strip()
-    ]
 
     matches = []
 
-    for paragraph in paragraphs:
-        paragraph_words = tokenize(paragraph)
-        score = len(question_words & paragraph_words)
+    for chunk in chunks:
+        chunk_words = tokenize(chunk)
+        score = len(question_words & chunk_words)
 
         if score > 0:
-            matches.append((score, paragraph))
-
+            matches.append((score, chunk))
+    
+    
     if not matches:
         return {
-            "question": request.question,
-            "answer": "I couldn't find relevant information in this document."
-        }
+        "question": request.question,
+        "answer": "I couldn't find relevant information in this document."
+    }
+    
 
     matches.sort(key=lambda item: item[0], reverse=True)
 
-    # Provide the best matching text as context
-    context = "\n".join(
-        paragraph for _, paragraph in matches[:5]
+# Combine the three most relevant chunks as context
+    context = "\n\n".join(
+    chunk for _, chunk in matches[:3]
     )
 
     prompt = f"""
