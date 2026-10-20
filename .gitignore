@@ -12,3 +12,4 @@ wheels/
 #files 
 test_ollama.py
 temp1.py
+test_embedding.py
