@@ -10,6 +10,6 @@ wheels/
 .venv
 .env 
 #files 
-test_ollama.py
+check_ollama.py
 temp1.py
-test_embedding.py
+embedding_experiment.py.py
