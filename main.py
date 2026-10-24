@@ -147,36 +147,59 @@ def ask_question(request: QuestionRequest):
     }
 
     top_chunks = scored_chunks[:3]
-
+    
+    print(f"Retrieved chunks")
+    for score,chunk in top_chunks:
+        print(f"\n similarity score: {score}")
+        print(chunk)
     context = "\n\n".join(
-        chunk for score, chunk in top_chunks
-    )
+    f"Similarity score: {score:.4f}\n"
+    f"Document chunk:\n{chunk}"
+    for score, chunk in top_chunks
+)
 
     # Prepare the prompt for Gemma
-    prompt = f"""
+    prompt =f"""
 You are an AI Document Assistant.
 
-Answer the question using only the document context below.
-If the context does not contain enough information, say so.
-Do not invent facts.
+Answer the question using the document chunks below.
 
-Document context:
+Rules:
+1. Read all chunks before answering.
+2. Use similarity scores to identify relevant chunks, but judge relevance
+   using the actual text too.
+3. If the document provides partial information relevant to the
+   question, give that information instead of refusing entirely.
+4. Clearly distinguish facts explicitly stated in the document from
+   conclusions that are not explicitly stated.
+5. Never claim that information is absent if a relevant chunk contains it.
+6. Combine related information from multiple chunks when necessary.
+7. You may paraphrase the document, but do not add unsupported facts.
+8. If the document does not contain enough information to answer,
+   clearly say so.
+
+Document chunks:
 {context}
 
-Question:
-{request.question}
+Question: {request.question}
 
 Answer:
 """
-
+    print("\n--- PROMPT SENT TO OLLAMA ---")
+    print(prompt)
+    print("--- END PROMPT ---\n")
     # Ask Gemma to generate the answer
     try:
         response = httpx.post(
             OLLAMA_URL,
             json={
-                "model": "gemma:2b",
+                "model": "mistral:latest",
                 "prompt": prompt,
-                "stream": False
+                "stream": False,
+                "options": {
+                "temperature": 0,
+                "seed": 42
+            }
             },
             timeout=120
         )
